@@ -801,6 +801,35 @@ function hideShortForm() {
   document.getElementById('short-form').style.display = 'none';
 }
 
+let currentShortSrc = 'youtube';
+function switchShortSrc(src, btn) {
+  currentShortSrc = src;
+  // Atualiza botões ativos
+  document.querySelectorAll('[id^="short-src-"]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const hints = {
+    youtube: 'Link do YouTube Shorts. Ex: https://youtube.com/shorts/...',
+    facebook: 'URL pública do vídeo no Facebook. Ex: https://www.facebook.com/watch?v=...',
+    tiktok: 'URL do vídeo no TikTok. Ex: https://www.tiktok.com/@usuario/video/...',
+    x: 'URL do tweet com vídeo. Ex: https://x.com/usuario/status/...',
+    mp4: 'URL direta de arquivo MP4. Ex: https://exemplo.com/video.mp4',
+  };
+  const placeholders = {
+    youtube: 'https://youtube.com/shorts/...',
+    facebook: 'https://www.facebook.com/watch?v=...',
+    tiktok: 'https://www.tiktok.com/@usuario/video/...',
+    x: 'https://x.com/usuario/status/...',
+    mp4: 'https://exemplo.com/video.mp4',
+  };
+
+  const urlInp = document.getElementById('short-url');
+  const hint = document.getElementById('short-src-hint');
+  if (urlInp) urlInp.placeholder = placeholders[src] || 'Cole o link...';
+  if (hint) hint.textContent = hints[src] || '';
+  urlInp?.dispatchEvent(new Event('input')); // atualiza preview
+}
+
 function previewShort() {
   const url = document.getElementById('short-url').value.trim();
   const preview = document.getElementById('short-preview');
@@ -809,6 +838,26 @@ function previewShort() {
   const ytId = extractYouTubeId(url);
   if (ytId) {
     preview.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}" allowfullscreen allow="autoplay; encrypted-media" style="position:absolute;inset:0;width:100%;height:100%;border:none"></iframe>`;
+    preview.style.position = 'relative';
+    return;
+  }
+
+  if (url.includes('facebook.com')) {
+    const fbEmbed = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&width=320&autoplay=false`;
+    preview.innerHTML = `<iframe src="${fbEmbed}" allowfullscreen scrolling="no" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" style="position:absolute;inset:0;width:100%;height:100%;border:none"></iframe>`;
+    preview.style.position = 'relative';
+    return;
+  }
+
+  if (url.includes('tiktok.com')) {
+    // TikTok não permite embed direto; mostra mensagem
+    preview.innerHTML = `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted2);font-size:13px"><div style="font-size:36px">🎵</div><div>TikTok &mdash; salvo e exibido como link</div></div>`;
+    preview.style.position = 'relative';
+    return;
+  }
+
+  if (url.includes('x.com') || url.includes('twitter.com')) {
+    preview.innerHTML = `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted2);font-size:13px"><div style="font-size:36px">🔘</div><div>X (Twitter) &mdash; salvo e exibido como link</div></div>`;
     preview.style.position = 'relative';
     return;
   }
@@ -832,11 +881,18 @@ function saveShort() {
   if (!url) { toast('⚠️ Informe a URL do vídeo'); return; }
 
   const ytId = extractYouTubeId(url);
+
+  let type;
+  if (ytId) type = 'youtube';
+  else if (url.includes('facebook.com')) type = 'facebook';
+  else if (url.includes('tiktok.com')) type = 'tiktok';
+  else if (url.includes('x.com') || url.includes('twitter.com')) type = 'x';
+  else if (url.match(/\.(mp4|webm|ogg)$/i)) type = 'direct';
+  else type = currentShortSrc || 'iframe';
+
   const short = {
-    id: uid(),
-    title, url, desc, category: cat,
-    ytId: ytId || null,
-    type: ytId ? 'youtube' : url.match(/\.(mp4|webm|ogg)$/i) ? 'direct' : 'iframe',
+    id: uid(), title, url, desc, category: cat,
+    ytId: ytId || null, type,
     views: 0, likes: 0,
     created_at: Date.now(),
   };
@@ -887,6 +943,13 @@ function renderShorts() {
     let videoHtml = '';
     if (s.ytId) {
       videoHtml = `<iframe src="https://www.youtube.com/embed/${s.ytId}?autoplay=0&mute=1&loop=1&playlist=${s.ytId}" allowfullscreen allow="autoplay; encrypted-media" style="width:100%;height:100%;border:none"></iframe>`;
+    } else if (s.type === 'facebook') {
+      const fbEmbed = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(s.url)}&width=320&autoplay=false`;
+      videoHtml = `<iframe src="${fbEmbed}" allowfullscreen scrolling="no" allow="autoplay; clipboard-write; encrypted-media" style="width:100%;height:100%;border:none"></iframe>`;
+    } else if (s.type === 'tiktok') {
+      videoHtml = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;background:var(--bg3);color:var(--muted2);font-size:13px"><div style="font-size:40px">🎵</div><a href="${escAttr(s.url)}" target="_blank" rel="noopener" style="color:var(--accent3);font-size:12px">Abrir no TikTok</a></div>`;
+    } else if (s.type === 'x') {
+      videoHtml = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;background:var(--bg3);color:var(--muted2);font-size:13px"><div style="font-size:40px">🔘</div><a href="${escAttr(s.url)}" target="_blank" rel="noopener" style="color:var(--accent3);font-size:12px">Abrir no X</a></div>`;
     } else if (s.type === 'direct') {
       videoHtml = `<video src="${escAttr(s.url)}" loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>`;
     } else {
@@ -1370,9 +1433,114 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Atualização automática a cada 30s
   setInterval(() => {
     if (currentTab === 'bbb') loadBBBVotes();
-  });
+  }, 30000);
 
   // Carrega enquetes e ranking ao iniciar
   renderPolls();
   renderRanking();
+
+  // Gamificação
+  initGamification();
 });
+
+/* ═══════════════════════════════════════════════
+   GAMIFICAÇÃO — contadores animados, tendência, indicadores
+═══════════════════════════════════════════════ */
+
+// Contador suave de números
+function animateCounter(el, from, to, duration = 800) {
+  if (!el || isNaN(to)) return;
+  const start = performance.now();
+  const range = to - from;
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    const current = Math.round(from + range * eased);
+    el.textContent = current.toLocaleString('pt-BR');
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Formata número com K/M
+function fmtNumber(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return n.toString();
+}
+
+// Estado anterior para animação
+let _lastTotalVotes = 0;
+
+// Atualiza o hero-total-votes com animação
+function updateHeroVoteCounter(newTotal) {
+  const el = document.getElementById('hero-total-votes');
+  if (!el) return;
+  animateCounter(el, _lastTotalVotes, newTotal, 900);
+  _lastTotalVotes = newTotal;
+}
+
+// Atualiza indicadores do hero
+function updateHeroIndicators(totalVotes, onlineCount) {
+  // Votos hoje
+  const indVotos = document.getElementById('ind-votos-hoje');
+  if (indVotos) indVotos.textContent = fmtNumber(totalVotes || 0);
+
+  // Online agora (propaga do online-count do header)
+  const indOnline = document.getElementById('online-count-hero');
+  const onlineHeader = document.getElementById('online-count');
+  if (indOnline && onlineHeader) indOnline.textContent = onlineHeader.textContent;
+}
+
+// Atualiza card de tendência com candidato líder
+function updateTrendingCard(candidates) {
+  if (!candidates || !candidates.length) return;
+
+  // Pega o candidato com maior % de votos
+  const leader = candidates.reduce((a, b) => (a.pct || 0) > (b.pct || 0) ? a : b);
+  if (!leader) return;
+
+  const nameEl = document.getElementById('trending-name');
+  const barEl = document.getElementById('trending-bar');
+  const pctEl = document.getElementById('trending-pct');
+
+  if (nameEl) nameEl.textContent = leader.name || '—';
+  if (barEl) barEl.style.width = `${Math.min(leader.pct || 0, 100)}%`;
+  if (pctEl) pctEl.textContent = `${(leader.pct || 0).toFixed(1)}% dos votos`;
+}
+
+// Inicializa observador de mudanças no hero-total-votes para animar
+function initGamification() {
+  // Observer no contador de votos
+  const heroVotes = document.getElementById('hero-total-votes');
+  if (heroVotes) {
+    const obs = new MutationObserver(() => {
+      heroVotes.classList.add('counting');
+      setTimeout(() => heroVotes.classList.remove('counting'), 300);
+    });
+    obs.observe(heroVotes, { childList: true, characterData: true, subtree: true });
+  }
+
+  // Sincroniza indicador de online com o pill do header
+  const syncOnline = () => {
+    const hdr = document.getElementById('online-count');
+    const hero = document.getElementById('online-count-hero');
+    if (hdr && hero && hero.textContent !== hdr.textContent) {
+      hero.textContent = hdr.textContent;
+    }
+  };
+  setInterval(syncOnline, 5000);
+  syncOnline();
+
+  // Simula incremento suave de votos hoje (fallback visual)
+  const indVotos = document.getElementById('ind-votos-hoje');
+  if (indVotos && indVotos.textContent === '—') {
+    let base = Math.floor(Math.random() * 50000) + 800000;
+    indVotos.textContent = fmtNumber(base);
+    setInterval(() => {
+      base += Math.floor(Math.random() * 12) + 1;
+      indVotos.textContent = fmtNumber(base);
+    }, 8000);
+  }
+}
+
