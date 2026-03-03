@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Administrativo - VotaAí</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin.css">
+  
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/admin.js" defer></script>
+</head>
+<body>
+  
+  <!-- SESSÃO DE LOGIN -->
+  <div id="login-section" class="centered-box">
+    <div class="card login-card">
+      <div class="logo">🔒 Painel Admin</div>
+      <p style="margin-bottom: 20px; color: #666; text-align: center;">Acesso restrito VotaAí</p>
+      
+      <form id="login-form">
+        <label>E-mail</label>
+        <input type="email" id="email" class="form-input" required placeholder="admin@votaai.com">
+        
+        <label>Senha</label>
+        <input type="password" id="password" class="form-input" required placeholder="••••••••">
+        
+        <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- SESSÃO DO PAINEL ADMIN -->
+  <div id="admin-section" style="display: none;">
+    <header class="admin-header">
+      <div class="admin-container header-content">
+        <h2>Painel Administrativo</h2>
+        <div style="display: flex; gap: 15px; align-items: center;">
+          <span style="font-size: 14px;">Logado como: <strong id="admin-email"></strong></span>
+          <button onclick="logout()" class="btn-ghost">Sair</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-container">
+      
+      <!-- CRIAR ENQUETE -->
+      <section class="card mb-30">
+        <h3 class="section-title">✨ Criar Nova Enquete</h3>
+        <p class="subtitle">Adicione uma pergunta e múltiplas opções de voto.</p>
+        
+        <div style="margin-top: 15px;">
+          <label>Pergunta Principal</label>
+          <input type="text" id="new-poll-question" class="form-input" placeholder="Ex: Quem deve sair neste paredão?">
+          
+          <label style="margin-top: 15px; display: block;">Opções de Resposta</label>
+          <div id="options-container">
+            <input type="text" class="form-input poll-option-input" placeholder="Ex: Fulano" required>
+            <input type="text" class="form-input poll-option-input" placeholder="Ex: Ciclano" required>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+            <button onclick="addOptionField()" class="btn-ghost" style="color: #3B1F6E; border: 1px dashed #3B1F6E;">+ Adicionar Opção</button>
+            <button id="btn-create-poll" onclick="createPoll()" class="btn-primary">+ Publicar Enquete</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- LISTA DE ENQUETES -->
+      <section class="card">
+        <h3 class="section-title">📊 Enquetes Ativas e Inativas</h3>
+        <p class="subtitle">Gerencie as enquetes públicas do sistema.</p>
+        
+        <div id="admin-polls-list" style="margin-top: 20px;">
+          <div style="text-align: center; color: grey;">Carregando enquetes...</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+</body>
+</html>
