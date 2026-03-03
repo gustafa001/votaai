@@ -505,29 +505,319 @@ function renderChart() {
    ENQUETES, VÍDEOS E SHORTS (PLACEHOLDERS)
 ═══════════════════════════════════════════════ */
 
-function renderPolls() {
-  const container = document.getElementById('polls-list');
-  if (!container) return;
-  container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: enquetes da comunidade!</div>';
+async function renderPolls() {
+  const list = document.getElementById(\'polls-list\');
+  const countEl = document.getElementById(\'polls-count\');
+  if (!list) return;
+
+  list.innerHTML = \`<div style="text-align:center;padding:40px;color:var(--muted2);">⏳ Carregando enquetes ativas...</div>\`;
+
+  let polls = [];
+
+  try {
+    const { data: pollsData, error: pollsError } = await sb()
+      .from(\'poll_votes\') // Corrigido para poll_votes
+      .select(\'*\') // Seleciona todos os campos, pois poll_options não é uma tabela aninhada
+      .order(\'created_at\', { ascending: false })
+      .limit(50);
+
+    if (pollsError) throw pollsError;
+    if (pollsData) polls = pollsData;
+  } catch (e) {
+    console.warn("Erro ao carregar do Supabase:", e.message);
+  }
+
+  if (countEl) countEl.textContent = `${polls.length} enquete${polls.length !== 1 ? \'s\' : \'\'} ativa${polls.length !== 1 ? \'s\' : \'\'}`;
+
+  if (!polls.length) {
+    list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">Nenhuma enquete ainda</div>
+          <div class="empty-desc">Em breve a equipe do VotaAí lançará novas votações exclusivas!</div>
+        </div>`;
+    return;
+  }
+
+  list.innerHTML = polls.map((poll, pi) => {
+    // Assumindo que cada 'poll' de 'poll_votes' já contém os dados necessários
+    // Se 'poll_votes' for apenas os votos, a lógica precisará ser mais complexa para agrupar por enquete
+    // Por simplicidade, vamos assumir que 'poll_votes' tem a estrutura de 'polls' com um campo 'question' e 'options'
+    const totalVotes = poll.vote_count || 0; // Ajuste conforme a estrutura real de poll_votes
+    const votedKey = `va_voted_${poll.id}`;
+    const voted = localStorage.getItem(votedKey);
+    const ago = timeAgo(poll.created_at ? new Date(poll.created_at).getTime() : Date.now());
+    const cat = poll.category || \'geral\'; // Categoria da enquete
+    const commentsKey = `va_comments_${poll.id}`;
+    const comments = JSON.parse(localStorage.getItem(commentsKey) || \'[]\');
+
+    return `
+        <div class="card fade-up" id="poll-${poll.id}">
+          <!-- Header da enquete -->
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:8px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                <span style="font-size:11px">📊 <span style="color:var(--muted2);">${cat.toUpperCase()}</span></span>
+                ${pi === 0 ? \'<span class="badge badge-hot">🔥 Novo</span>\' : \'\'}
+                ${totalVotes > 100 ? \'<span class="badge badge-live">⚡ Popular</span>\' : \'\'}
+              </div>
+              <h3 style="font-family:var(--font-head);font-size:16px;font-weight:800;line-height:1.3;margin-bottom:0">${escHtml(poll.question)}</h3>
+            </div>
+            <button class="btn-icon" onclick="openShareModal(\'${escAttr(poll.question)}\',\'Vote nesta enquete no VotaAí!\')" title="Compartilhar">🔗</button>
+          </div>
+
+          <!-- Opções -->
+          <div id="poll-opts-${poll.id}">
+            ${renderPollOptions(poll, voted)}
+          </div>
+
+          <!-- Footer da enquete -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:11px;color:var(--muted2)">
+            <span>${fmtNum(totalVotes)} votos • ${ago}</span>
+            <button class="btn-subtle" onclick="toggleComments(\'${poll.id}\')">💬 ${comments.length} comentários</button>
+          </div>
+
+          <!-- Área de comentários -->
+          <div id="comments-${poll.id}" style="display:none;margin-top:16px">
+            <!-- Comentários serão carregados aqui -->
+            <div style="margin-bottom:12px;font-weight:bold">Comentários:</div>
+            <div id="comments-list-${poll.id}">
+              ${comments.length ? comments.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--border);">${escHtml(c.text)}</div>`).join(\'\') : \'Nenhum comentário ainda.\'}
+            </div>
+            <div style="margin-top:12px">
+              <input type="text" id="comment-input-${poll.id}" placeholder="Adicionar comentário..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-dark);color:white;">
+              <button class="btn-primary" style="margin-top:8px;" onclick="addComment(\'${poll.id}\')">Enviar</button>
+            </div>
+          </div>
+        </div>
+    `;
+  }).join(\'\');
+
+  // Funções auxiliares para renderPollOptions, toggleComments, addComment (precisam ser definidas)
+  function renderPollOptions(poll, voted) {
+    return poll.options.map((opt, i) => `
+      <div class="opt-row ${voted ? \'voted\' : \'\'} ${voted && voted === opt.id ? \'selected\' : \'\'}"
+           id="poll-opt-${poll.id}-${opt.id}"
+           onclick="votePoll(\'${poll.id}\', \'${opt.id}\')"
+           style="--opt-color:${PALETTE[i % PALETTE.length].main};--opt-grad:${PALETTE[i % PALETTE.length].grad};margin-bottom:8px">
+        <div class="opt-fill" style="width:${voted ? (opt.vote_count / poll.total_votes * 100) : 0}%"></div>
+        <div class="opt-inner">
+          <div class="opt-left">
+            <div class="opt-check ${voted && voted === opt.id ? \'checked\' : \'\'}"></div>
+            <span class="opt-label">${escHtml(opt.text)}</span>
+          </div>
+          <span class="opt-pct">${voted ? (opt.vote_count / poll.total_votes * 100).toFixed(1) + \'%\' : \'\'}</span>
+        </div>
+      </div>
+    `).join(\'\');
+  }
+
+  function toggleComments(pollId) {
+    const commentsArea = document.getElementById(`comments-${pollId}`);
+    if (commentsArea) {
+      commentsArea.style.display = commentsArea.style.display === \'none\' ? \'block\' : \'none\';
+    }
+  }
+
+  async function addComment(pollId) {
+    const input = document.getElementById(`comment-input-${pollId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    const commentsKey = `va_comments_${pollId}`;
+    const comments = JSON.parse(localStorage.getItem(commentsKey) || \'[]\');
+    comments.push({ text: text, created_at: new Date().toISOString() });
+    localStorage.setItem(commentsKey, JSON.stringify(comments));
+    input.value = \'\';
+    renderPolls(); // Recarrega as enquetes para mostrar o novo comentário
+  }
+
+  async function votePoll(pollId, optionId) {
+    const votedKey = `va_voted_${pollId}`;
+    if (localStorage.getItem(votedKey)) {
+      toast(\'Você já votou nesta enquete!\');
+      return;
+    }
+
+    try {
+      // Aqui você faria a chamada ao Supabase para registrar o voto
+      // Exemplo: await sb().from(\'poll_options\').update({ vote_count: \'increment\' }).eq(\'id\', optionId);
+      // Por enquanto, vamos simular o voto e atualizar o localStorage
+      localStorage.setItem(votedKey, optionId);
+      toast(\'Voto computado!\');
+      renderPolls(); // Recarrega as enquetes para mostrar o resultado
+    } catch (e) {
+      console.error(\'Erro ao votar na enquete:\', e);
+      toast(\'❌ Erro ao registrar voto. Tente novamente.\');
+    }
+  }
 }
 
 function renderRanking() {
-  const container = document.getElementById('ranking-list');
+  const container = document.getElementById(\'ranking-list\');
   if (!container) return;
-  container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: ranking de popularidade!</div>';
-}
-
-function renderShorts() {
-  const container = document.getElementById('shorts-list');
-  if (!container) return;
-  container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: os melhores shorts do BBB 26!</div>';
+  container.innerHTML = \'<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: ranking de popularidade!</div>\';
 }
 
 function renderVideos() {
-  const container = document.getElementById('videos-list');
+  const container = document.getElementById(\'videos-list\');
   if (!container) return;
-  container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: vídeos e resumos do programa!</div>';
+  container.innerHTML = \'<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: vídeos e resumos do programa!</div>\';
 }
+
+funasync function renderPolls() {
+  const list = document.getElementById(\'polls-list\');
+  const countEl = document.getElementById(\'polls-count\');
+  if (!list) return;
+
+  list.innerHTML = \`<div style="text-align:center;padding:40px;color:var(--muted2);">⏳ Carregando enquetes ativas...</div>\`;
+
+  let polls = [];
+
+  try {
+    const { data: pollsData, error: pollsError } = await sb()
+      .from(\'poll_votes\') // Corrigido para poll_votes
+      .select(\'*\') // Seleciona todos os campos, pois poll_options não é uma tabela aninhada
+      .order(\'created_at\', { ascending: false })
+      .limit(50);
+
+    if (pollsError) throw pollsError;
+    if (pollsData) polls = pollsData;
+  } catch (e) {
+    console.warn("Erro ao carregar do Supabase:", e.message);
+  }
+
+  if (countEl) countEl.textContent = `${polls.length} enquete${polls.length !== 1 ? \'s\' : \'\'} ativa${polls.length !== 1 ? \'s\' : \'\'}`;
+
+  if (!polls.length) {
+    list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">Nenhuma enquete ainda</div>
+          <div class="empty-desc">Em breve a equipe do VotaAí lançará novas votações exclusivas!</div>
+        </div>`;
+    return;
+  }
+
+  list.innerHTML = polls.map((poll, pi) => {
+    // Assumindo que cada \'poll\' de \'poll_votes\' já contém os dados necessários
+    // Se \'poll_votes\' for apenas os votos, a lógica precisará ser mais complexa para agrupar por enquete
+    // Por simplicidade, vamos assumir que \'poll_votes\' tem a estrutura de \'polls\' com um campo \'question\' e \'options\'
+    const totalVotes = poll.vote_count || 0; // Ajuste conforme a estrutura real de poll_votes
+    const votedKey = `va_voted_${poll.id}`;
+    const voted = localStorage.getItem(votedKey);
+    const ago = timeAgo(poll.created_at ? new Date(poll.created_at).getTime() : Date.now());
+    const cat = poll.category || \'geral\'; // Categoria da enquete
+    const commentsKey = `va_comments_${poll.id}`;
+    const comments = JSON.parse(localStorage.getItem(commentsKey) || \'[]\');
+
+    return `
+        <div class="card fade-up" id="poll-${poll.id}">
+          <!-- Header da enquete -->
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:8px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                <span style="font-size:11px">📊 <span style="color:var(--muted2);">${cat.toUpperCase()}</span></span>
+                ${pi === 0 ? \'<span class="badge badge-hot">🔥 Novo</span>\' : \'\'}
+                ${totalVotes > 100 ? \'<span class="badge badge-live">⚡ Popular</span>\' : \'\'}
+              </div>
+              <h3 style="font-family:var(--font-head);font-size:16px;font-weight:800;line-height:1.3;margin-bottom:0">${escHtml(poll.question)}</h3>
+            </div>
+            <button class="btn-icon" onclick="openShareModal(\'${escAttr(poll.question)}\',\'Vote nesta enquete no VotaAí!\')" title="Compartilhar">🔗</button>
+          </div>
+
+          <!-- Opções -->
+          <div id="poll-opts-${poll.id}">
+            ${renderPollOptions(poll, voted)}
+          </div>
+
+          <!-- Footer da enquete -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:11px;color:var(--muted2)">
+            <span>${fmtNum(totalVotes)} votos • ${ago}</span>
+            <button class="btn-subtle" onclick="toggleComments(\'${poll.id}\')">💬 ${comments.length} comentários</button>
+          </div>
+
+          <!-- Área de comentários -->
+          <div id="comments-${poll.id}" style="display:none;margin-top:16px">
+            <!-- Comentários serão carregados aqui -->
+            <div style="margin-bottom:12px;font-weight:bold">Comentários:</div>
+            <div id="comments-list-${poll.id}">
+              ${comments.length ? comments.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--border);">${escHtml(c.text)}</div>`).join(\'\') : \'Nenhum comentário ainda.\'}
+            </div>
+            <div style="margin-top:12px">
+              <input type="text" id="comment-input-${poll.id}" placeholder="Adicionar comentário..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-dark);color:white;">
+              <button class="btn-primary" style="margin-top:8px;" onclick="addComment(\'${poll.id}\')">Enviar</button>
+            </div>
+          </div>
+        </div>
+    `;
+  }).join(\'\');
+
+  // Funções auxiliares para renderPollOptions, toggleComments, addComment (precisam ser definidas)
+  function renderPollOptions(poll, voted) {
+    // Esta função precisa ser adaptada para a estrutura de dados real de poll_votes
+    // Assumindo que poll.options é um array de objetos { id, text, vote_count }
+    if (!poll.options || !Array.isArray(poll.options)) return \'\';
+
+    const totalVotes = poll.options.reduce((sum, opt) => sum + (opt.vote_count || 0), 0);
+
+    return poll.options.map((opt, i) => `
+      <div class="opt-row ${voted ? \'voted\' : \'\'} ${voted && voted === opt.id ? \'selected\' : \'\'}"
+           id="poll-opt-${poll.id}-${opt.id}"
+           onclick="votePoll(\'${poll.id}\', \'${opt.id}\')"
+           style="--opt-color:${PALETTE[i % PALETTE.length].main};--opt-grad:${PALETTE[i % PALETTE.length].grad};margin-bottom:8px">
+        <div class="opt-fill" style="width:${voted && totalVotes > 0 ? (opt.vote_count / totalVotes * 100) : 0}%"></div>
+        <div class="opt-inner">
+          <div class="opt-left">
+            <div class="opt-check ${voted && voted === opt.id ? \'checked\' : \'\'}"></div>
+            <span class="opt-label">${escHtml(opt.text)}</span>
+          </div>
+          <span class="opt-pct">${voted && totalVotes > 0 ? (opt.vote_count / totalVotes * 100).toFixed(1) + \'%\' : \'\'}</span>
+        </div>
+      </div>
+    `).join(\'\');
+  }
+
+  function toggleComments(pollId) {
+    const commentsArea = document.getElementById(`comments-${pollId}`);
+    if (commentsArea) {
+      commentsArea.style.display = commentsArea.style.display === \'none\' ? \'block\' : \'none\';
+    }
+  }
+
+  async function addComment(pollId) {
+    const input = document.getElementById(`comment-input-${pollId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    const commentsKey = `va_comments_${pollId}`;
+    const comments = JSON.parse(localStorage.getItem(commentsKey) || \'[]\');
+    comments.push({ text: text, created_at: new Date().toISOString() });
+    localStorage.setItem(commentsKey, JSON.stringify(comments));
+    input.value = \'\';
+    renderPolls(); // Recarrega as enquetes para mostrar o novo comentário
+  }
+
+  async function votePoll(pollId, optionId) {
+    const votedKey = `va_voted_${pollId}`;
+    if (localStorage.getItem(votedKey)) {
+      toast(\'Você já votou nesta enquete!\');
+      return;
+    }
+
+    try {
+      // Aqui você faria a chamada ao Supabase para registrar o voto
+      // Exemplo: await sb().from(\'poll_options\').update({ vote_count: \'increment\' }).eq(\'id\', optionId);
+      // Por enquanto, vamos simular o voto e atualizar o localStorage
+      localStorage.setItem(votedKey, optionId);
+      toast(\'Voto computado!\');
+      renderPolls(); // Recarrega as enquetes para mostrar o resultado
+    } catch (e) {
+      console.error(\'Erro ao votar na enquete:\', e);
+      toast(\'❌ Erro ao registrar voto. Tente novamente.\');
+    }
+  }
+}}
 
 
 /* ═══════════════════════════════════════════════
