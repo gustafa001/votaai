@@ -665,7 +665,7 @@ function renderVideos() {
   container.innerHTML = \'<div class="card" style="text-align:center;padding:30px;color:var(--muted2);">Em breve: vídeos e resumos do programa!</div>\';
 }
 
-funasync function renderPolls() {
+async function renderPolls() {
   const list = document.getElementById(\'polls-list\');
   const countEl = document.getElementById(\'polls-count\');
   if (!list) return;
