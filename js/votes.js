@@ -166,8 +166,15 @@ const BBB_CONFIG = {
   ],
   // Data/hora do encerramento da votação (Ex: '2026-03-01T22:30:00')
   // Se a data atual for maior que esta, a votação aparecerá como ENCERRADA.
-  proximoParedao: new Date('2026-03-01T22:30:00'),
-  votosAbertos: false, // Flag manual para forçar o encerramento se necessário
+  proximoParedao: (() => {
+    const now = new Date();
+    const next = new Date(now);
+    const dom = (7 - now.getDay()) % 7 || 7;
+    next.setDate(now.getDate() + dom);
+    next.setHours(22, 30, 0, 0);
+    return next;
+  })(),
+  votosAbertos: true,
 };
 
 // Dados de fontes externas (atualize manualmente ou via API)
